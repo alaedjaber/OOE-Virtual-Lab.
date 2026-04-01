@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; color: #333; padding: 20px; max-width: 800px; margin: 0 auto; }
+        h2 { color: #2c3e50; text-align: center; }
+        .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        
+        /* Controls */
+        .controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 15px; background: #eef2f5; border-radius: 8px; }
+        .slider-group { flex-grow: 1; margin-right: 20px; }
+        input[type=range] { width: 100%; height: 8px; background: #d3d3d3; outline: none; opacity: 0.7; transition: opacity .2s; border-radius: 5px; }
+        input[type=range]:hover { opacity: 1; }
+        
+        /* Metrics Display */
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+        .metric-card { background: #fff; border: 1px solid #ddd; padding: 10px; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 1.4em; font-weight: bold; color: #2980b9; margin: 5px 0; }
+        .metric-label { font-size: 0.85em; color: #7f8c8d; }
+        .status-card { grid-column: span 3; color: white; transition: background 0.3s; }
+        
+        /* Canvas */
+        .canvas-container { position: relative; width: 100%; height: 350px; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; overflow: hidden; }
+        canvas { display: block; margin: 0 auto; }
+        
+        .tooltip { position: absolute; font-size: 0.8em; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+        
+        .citation { font-size: 0.75em; color: #666; margin-top: 10px; text-align: right; font-style: italic; }
+    </style>
+    
+</head>
+<body>
+
+<div class="container">
+    <h2>Fiber Optic Bend Simulation</h2>
+    
+    <div class="controls">
+        <div class="slider-group">
+            <label for="radiusSlider"><strong>Bend Radius (R): </strong><span id="radiusDisplay">10.0</span> mm</label>
+            <br>
+            <input type="range" id="radiusSlider" min="1.5" max="15.0" step="0.1" value="10.0">
+        </div>
+        <div style="text-align: right; font-size: 0.9em; color: #555;">
+            Core Radius (a): 25 μm<br>
+            Initial Angle ($\theta_i$): 81.0°
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-label">Local Incidence Angle</div>
+            <div id="angleDisplay" class="metric-value">80.86°</div>
+            <div class="metric-label">Critical: 80.63°</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Signal Strength</div>
+            <div id="signalDisplay" class="metric-value">100%</div>
+            <div class="metric-label">Fresnel Calculated</div>
+        </div>
+        <div class="metric-card status-card" id="statusCard">
+            <div class="metric-label" style="color: rgba(255,255,255,0.8);">Link Status</div>
+            <div id="statusDisplay" class="metric-value" style="color: white;">Optimal</div>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="fiberCanvas" width="700" height="350"></canvas>
+        <div id="leakLabel" class="tooltip" style="top: 150px; left: 450px;">Light Leaking!</div>
+    </div>
+    
+    <div class="citation">
+        Based on "Track 3: Fiber Optic Bandwidth Simulation" [cite: 1]
+    </div>
+</div>
+<script>
+        // --- Physics Constants from Document [cite: 1, 35, 76] ---
+    const n1 = 1.50;      // Core index
+    const n2 = 1.48;      // Cladding index
+    const a_mm = 0.025;   // Core radius in mm (25 microns)
+    const theta_init_deg = 81.0; // Initial angle in degrees [cite: 75]
+    
+    // Derived Critical Angle [cite: 32]
+    // sin(theta_c) = n2/n1 => 1.48/1.50 = 0.9866
+    // theta_c = asin(0.9866) = 80.63 degrees
+    const theta_c_rad = Math.asin(n2/n1);
+    const theta_c_deg = theta_c_rad * (180/Math.PI);
+
+    // DOM Elements
+    const slider = document.getElementById('radiusSlider');
+    const radiusDisplay = document.getElementById('radiusDisplay');
+    const angleDisplay = document.getElementById('angleDisplay');
+    const signalDisplay = document.getElementById('signalDisplay');
+    const statusDisplay = document.getElementById('statusDisplay');
+    const statusCard = document.getElementById('statusCard');
+    const canvas = document.getElementById('fiberCanvas');
+    const ctx = canvas.getContext('2d');
+    const leakLabel = document.getElementById('leakLabel');
+
+    // --- Main Update Function ---
+    function updateSimulation() {
+        const R = parseFloat(slider.value); // Bend Radius in mm
+        radiusDisplay.textContent = R.toFixed(1);
+
+        // 1. Calculate Angle Reduction 
+        // delta_theta (radians) = a / R
+        const delta_theta_rad = a_mm / R;
+        const delta_theta_deg = delta_theta_rad * (180 / Math.PI);
+
+        // 2. Calculate Local Incidence Angle [cite: 52]
+        // theta_local = theta_init - (a/R)
+        let theta_local_deg = theta_init_deg - delta_theta_deg;
+        const theta_local_rad = theta_local_deg * (Math.PI / 180);
+
+        angleDisplay.textContent = theta_local_deg.toFixed(2) + "°";
+
+        // 3. Calculate Signal Strength (Fresnel) [cite: 64, 69]
+        let signal = 1.0;
+        let isLeaking = false;
+
+        if (theta_local_deg < theta_c_deg) {
+            isLeaking = true;
+            
+            // Snell's Law for transmitted angle theta_t
+            // n1 * sin(theta_i) = n2 * sin(theta_t)
+            // sin(theta_t) = (n1/n2) * sin(theta_i)
+            const sin_theta_t = (n1 / n2) * Math.sin(theta_local_rad);
+            
+            // Check if physically possible (should be, since we are below critical angle)
+            if (sin_theta_t <= 1.0) {
+                const theta_t = Math.asin(sin_theta_t);
+                
+                // Fresnel Equations (Power Reflection Coefficients)
+                // Rs (Perpendicular/s-polarized)
+                const num_s = n1 * Math.cos(theta_local_rad) - n2 * Math.cos(theta_t);
+                const den_s = n1 * Math.cos(theta_local_rad) + n2 * Math.cos(theta_t);
+                const Rs = Math.pow(num_s / den_s, 2);
+                
+                // Rp (Parallel/p-polarized)
+                const num_p = n1 * Math.cos(theta_t) - n2 * Math.cos(theta_local_rad);
+                const den_p = n1 * Math.cos(theta_t) + n2 * Math.cos(theta_local_rad);
+                const Rp = Math.pow(num_p / den_p, 2);
+                
+                // Average for unpolarized light [cite: 64]
+                signal = (Rs + Rp) / 2;
+            } else {
+                signal = 1.0; // Should not happen given logic, but safety fallback
+            }
+        }
+
+        // Clamp signal for display
+        const signalPercent = (signal * 100).toFixed(1);
+        signalDisplay.textContent = signalPercent + "%";
+
+        // Update Status Colors
+        if (signal > 0.999) {
+            statusCard.style.background = "#27ae60"; // Green
+            statusDisplay.textContent = "Optimal (TIR)";
+            leakLabel.style.opacity = "0";
+        } else if (signal > 0.90) {
+            statusCard.style.background = "#f39c12"; // Orange
+            statusDisplay.textContent = "Minor Leakage";
+            leakLabel.style.opacity = "0.8";
+            leakLabel.textContent = "Minor Leak";
+        } else {
+            statusCard.style.background = "#c0392b"; // Red
+            statusDisplay.textContent = "CRITICAL LOSS";
+            leakLabel.style.opacity = "1";
+            leakLabel.textContent = "Light Leaking!";
+        }
+
+        drawFiber(R, isLeaking, signal);
+    }
+
+    // --- Visualization Function ---
+    function drawFiber(R, isLeaking, signalStrength) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const cx = 100; // Center X of the bend circle
+        const cy = 300; // Center Y of the bend circle
+        
+        // Scale factor: Visual representation needs to look good
+        // Real R varies 1.5mm to 15mm. 
+        // We'll map R=1.5 -> Tight Visual Radius, R=15 -> Broad Visual Radius
+        const visualScale = 15; 
+        const visualR = R * visualScale; 
+        const fiberWidth = 40; // Visual width of fiber tube
+
+        // 1. Draw The Fiber (Cladding/Core)
+        ctx.beginPath();
+        ctx.arc(cx, cy, visualR + fiberWidth/2, 1.5 * Math.PI, 0); // Outer edge
+        ctx.strokeStyle = "#2ecc71"; // Fiber green
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, visualR - fiberWidth/2, 1.5 * Math.PI, 0); // Inner edge
+        ctx.stroke();
+        
+        // Fill the fiber
+        ctx.beginPath();
+        ctx.arc(cx, cy, visualR + fiberWidth/2, 1.5 * Math.PI, 0);
+        ctx.arc(cx, cy, visualR - fiberWidth/2, 0, 1.5 * Math.PI, true);
+        ctx.fillStyle = "rgba(46, 204, 113, 0.1)";
+        ctx.fill();
+
+        // 2. Draw Straight Sections (Entrance/Exit)
+        // Entrance (Vertical, going up from left)
+        // Actually, let's match the standard "top-left to bottom-right" bend or similar.
+        // Let's assume entrance is from top-left, bending to right-down. 
+        // Coordinates (cx, cy-visualR) is top of arc.
+        
+        // Draw Entrance straight pipe
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - visualR - fiberWidth/2);
+        ctx.lineTo(cx - 100, cy - visualR - fiberWidth/2);
+        ctx.moveTo(cx, cy - visualR + fiberWidth/2);
+        ctx.lineTo(cx - 100, cy - visualR + fiberWidth/2);
+        ctx.stroke();
+        
+        // Draw Exit straight pipe (at angle 0, right of center)
+        ctx.beginPath();
+        ctx.moveTo(cx + visualR + fiberWidth/2, cy);
+        ctx.lineTo(cx + visualR + fiberWidth/2, cy + 100);
+        ctx.moveTo(cx + visualR - fiberWidth/2, cy);
+        ctx.lineTo(cx + visualR - fiberWidth/2, cy + 100);
+        ctx.stroke();
+
+        // 3. Draw The Light Ray
+        // Ray enters straight, hits the outer wall of the bend
+        ctx.beginPath();
+        ctx.strokeStyle = isLeaking ? `rgba(255, 0, 0, ${0.3 + signalStrength})` : "#e74c3c"; // Red laser
+        ctx.lineWidth = 3;
+        
+        // Start point (Straight in)
+        const rayY = cy - visualR + (fiberWidth * 0.3); // Slightly off center to ensure it hits wall
+        ctx.moveTo(cx - 100, rayY);
+        ctx.lineTo(cx, rayY); // Hits start of curve area
+
+        // Bounce logic (simplified visual)
+        // We simulate a zig-zag inside the curve
+        const bounces = 6;
+        let currentAngle = 1.5 * Math.PI; // Top
+        const angleStep = (0.5 * Math.PI) / bounces; 
+
+        // First bounce point on Outer Wall
+        // x = cx + R * cos(angle), y = cy + R * sin(angle)
+        // We'll alternate hitting outer (visualR + w/2) and inner (visualR - w/2)
+        
+        let rayX = cx;
+        let rayY_curr = rayY;
+        
+        for (let i = 0; i <= bounces; i++) {
+            currentAngle += angleStep;
+            if (currentAngle > 2 * Math.PI) currentAngle = 0; // Wrap for math
+
+            // Visual bounce coordinates
+            // Note: This is a stylized path to show "bouncing", not a perfect ray-trace, 
+            // as real ray tracing requires exact entrance vector.
+            // We force the "Outer" bounce to align with the leak visualization.
+            
+            const bounceRadius = (i % 2 === 0) ? visualR + fiberWidth/2 - 2 : visualR - fiberWidth/2 + 2;
+            const bx = cx + bounceRadius * Math.cos(currentAngle);
+            const by = cy + bounceRadius * Math.sin(currentAngle);
+            
+            ctx.lineTo(bx, by);
+
+            // Leak visualization at bounce points if leaking
+            // Only leak at outer wall hits (approx i=0, 2, 4...)
+            if (isLeaking && i % 2 === 0) {
+                 drawLeak(bx, by, currentAngle);
+            }
+        }
+        
+        // Exit straight
+        ctx.lineTo(cx + visualR, cy + 100);
+        ctx.stroke();
+    }
+
+    function drawLeak(x, y, angle) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle); 
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(30, 0); // Leak ray shooting out
+        ctx.strokeStyle = "rgba(155, 89, 182, 0.8)"; // Purple leak color
+        ctx.setLineDash([2, 2]);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Text label positioning
+        const canvasRect = canvas.getBoundingClientRect();
+        leakLabel.style.left = (x + 20) + "px";
+        leakLabel.style.top = (y - 20) + "px";
+        
+        ctx.restore();
+    }
+
+    // Initialize
+    slider.addEventListener('input', updateSimulation);
+    updateSimulation();
+
+</script>
+</body>
+</html>
