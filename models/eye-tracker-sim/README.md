@@ -9,6 +9,7 @@ This model simulates basic **Geometric Optics** involved in eye-tracking systems
 2. Move your mouse (or touch) to simulate eye movement.
 3. Observe the calculated **Gaze Point** on the screen.
 4. Use the visual rulers to estimate angles of incidence.
+5. direct link: https://opric-track04-workshop02.netlify.app/
 
 
 ## Technical Details
