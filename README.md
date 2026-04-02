@@ -28,13 +28,20 @@
 
 ### Theme 1: Physics of Refraction & Engineering Applications
 * Fiber optics: Critical angles and total internal reflection.
+**Description:** This simulation demonstrates Total Internal Reflection (TIR) within an optical fiber core, visualizing how light remains trapped to transmit data.
+Live LINK: "" 
 
 ### Theme 2: Biophysics of Vision & Optical Correction
 * Modeling the human eye (Relaxed vs. Accommodated).
+**Description:** A model of Geometric Optics in eye-tracking systems, focusing on corneal light reflection (Purkinje images) and gaze vector estimation.
+Live LINK: "https://opric-track04-workshop02.netlify.app/"
+
 
 ### Theme 3: EM Waves, Interference & Diffraction
 * Electromagnetic Side-Channel Attack Through Inductive Coupling
+**Description:** A research roadmap exploring EM side-channel attacks via inductive coupling. This project bridges Maxwellian physics with cybersecurity to demonstrate non-contact data interception.
 
+Live LINK: View " https://electromagentic-daul-channel-atack.netlify.app/ "
 ---
 
 ## 🚀 SUBMISSION INSTRUCTIONS (FOR PROJECT LEADERS)
