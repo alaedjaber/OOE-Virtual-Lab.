@@ -40,8 +40,7 @@ Live LINK: "https://opric-track04-workshop02.netlify.app/"
 ### Theme 3: EM Waves, Interference & Diffraction
 * Electromagnetic Side-Channel Attack Through Inductive Coupling
 **Description:** A research roadmap exploring EM side-channel attacks via inductive coupling. This project bridges Maxwellian physics with cybersecurity to demonstrate non-contact data interception.
-
-Live LINK: View " https://electromagentic-daul-channel-atack.netlify.app/ "
+Live LINK: "https://electromagentic-daul-channel-atack.netlify.app/ "
 ---
 
 ## 🚀 SUBMISSION INSTRUCTIONS (FOR PROJECT LEADERS)
